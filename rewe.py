@@ -91,8 +91,8 @@ def weekly_page(subreddit, file, css=None):
     file.write('</html>')
 
 def send_email(subject, to, message):
-    fromaddr = os.environ['REWE_SENDER']
-    frompass = os.environ['REWE_PASS']
+    fromaddr = os.environ['REWE_GMAIL_SENDER']
+    frompass = os.environ['REWE_GMAIL_PASS']
 
     msg = MIMEMultipart('alternative')
     msg['Subject'] = Header(subject, 'utf-8')
@@ -110,36 +110,34 @@ def send_email(subject, to, message):
         server.sendmail(fromaddr, [to], msg.as_string())
 
 def user_subreddits(token):
-    reddit = praw.Reddit(client_id=os.environ['REWE_APP_ID'],
-                         client_secret=os.environ['REWE_APP_SECRET'],
+    reddit = praw.Reddit(client_id=os.environ['REWE_REDDIT_APP_ID'],
+                         client_secret=os.environ['REWE_REDDIT_APP_SECRET'],
                          user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:52.0) Gecko/20100101 Firefox/52.0',
                          refresh_token=token)
     return reddit.user.subreddits()
 
 def send_newsletter(token, email):
-    for subreddit in user_subreddits(token):
-        subreddit = subreddit.display_name
-        with io.StringIO() as body:
-            print("Sending {} weekly for {}...".format(subreddit, email))
-            weekly_page(subreddit, body, css=REDDIT_CSS)
-            email_body = Premailer(body.getvalue(),
-                                   base_url='https://www.reddit.com',
-                                   disable_leftover_css=True).transform()
-            send_email(subject='Reddit weekly r/{}'.format(subreddit),
-                       to=email, message=email_body)
+    with io.StringIO() as body:
+        file = weekly_page_header(body, css=REDDIT_CSS)
 
-def main(filepath):
-    with io.open(filepath, 'r') as file:
-        users = json.load(file)
-        for email in users:
-            token = users[email]
-            send_newsletter(token, email)
+        for subreddit in user_subreddits(token):
+            subreddit = subreddit.display_name
+            weekly_page(subreddit, file)
+
+        weekly_page_footer(file)
+        email_body = Premailer(body.getvalue(),
+                               base_url='https://www.reddit.com',
+                               disable_leftover_css=True).transform()
+        
+        print("Sending weekly for {}...".format(email))
+        send_email(subject='Reddit weekly',
+                   to=email, message=email_body)
+
+def main():
+    send_newsletter(os.environ['REWE_REDDIT_REFRESH_TOKEN'], os.environ['REWE_DEST_EMAIL'])
 
 # usage: ./rewe.py -u, --users=<json>
 
 if __name__ == '__main__':
-    parser = ArgumentParser()
-    parser.add_argument('-u', '--users', required=True, help='load users and their tokens from a JSON file')
-    opt = parser.parse_args()
-    main(opt.users)
+    main()
 
