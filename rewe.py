@@ -111,9 +111,7 @@ def send_email(subject, to, message):
     msg.attach(MIMEText('Weekly Subreddit', 'plain'))
     msg.attach(MIMEText(message, 'html'))
 
-    with smtplib.SMTP(host='smtp.gmail.com', port=587) as server:
-        server.ehlo()
-        server.starttls()
+    with smtplib.SMTP_SSL(host='smtp.gmail.com', port=465) as server:
         server.ehlo()
         server.login(fromaddr, frompass)
         server.sendmail(fromaddr, [to], msg.as_string())
