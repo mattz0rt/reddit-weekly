@@ -8,6 +8,7 @@ import re
 import io
 import json
 import os
+import datetime
 
 from email.header import Header
 from email.mime.multipart import MIMEMultipart
@@ -138,6 +139,6 @@ def main():
 
 # usage: ./rewe.py -u, --users=<json>
 
-if __name__ == '__main__':
+if __name__ == '__main__' and datetime.datetime.today().weekday() == 5:
     main()
 
