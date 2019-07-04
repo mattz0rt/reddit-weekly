@@ -35,20 +35,10 @@ def _extract_external_css(selector):
             sheet = requests.get(href, headers=HEADERS).text if href else ""
             yield sheet
 
-def weekly_page(subreddit, file, css=None):
+def weekly_page_header(file, css=None):
     if isinstance(file, str):
         with open(file, 'w', encoding='utf-8') as f:
-            return weekly_page(subreddit, file=f, css=css)
-
-    r = requests.get("https://www.reddit.com/r/{}/top/?sort=top&t=week".format(subreddit),
-                     headers=HEADERS)
-
-    if r.status_code != 200:
-        raise RuntimeError("Request status code is {}.".format(r.status_code))
-    if r.encoding.lower() != 'utf-8':
-        raise RuntimeError("Request didn't return a UTF-8 output.")
-
-    sel = parsel.Selector(text=r.text)
+            return weekly_page_header(file=f, css=css)
 
     file.write('<!DOCTYPE html>')
     file.write('<html>')
@@ -82,14 +72,31 @@ def weekly_page(subreddit, file, css=None):
         file.write('</head>')
 
     file.write('<body class="">')
+
+    return file
+
+def weekly_page(subreddit, file):
+    r = requests.get("https://www.reddit.com/r/{}/top/?sort=top&t=week".format(subreddit),
+                     headers=HEADERS)
+
+    if r.status_code != 200:
+        raise RuntimeError("Request status code is {}.".format(r.status_code))
+    if r.encoding.lower() != 'utf-8':
+        raise RuntimeError("Request didn't return a UTF-8 output.")
+
+    sel = parsel.Selector(text=r.text)
+
     file.write('<div class="content" role="main">')
-    for spacer in sel.xpath("/html/body/div[@class='content']/div[@class='spacer' and style]"):
+    for id, spacer in enumerate(sel.xpath("/html/body/div[@class='content']/div[@class='spacer' and style]")):
         content = spacer.extract()
         content = re.sub(r'="//', r'="https://', content)
         file.write(content)
+        if id >= 4:
+            break
     file.write('</div>')
-    file.write('</body>')
 
+def weekly_page_footer(file):
+    file.write('</body>')
     file.write('</html>')
 
 def send_email(subject, to, message):
