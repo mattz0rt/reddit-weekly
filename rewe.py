@@ -9,6 +9,7 @@ import io
 import json
 import os
 import datetime
+import sys
 
 from email.header import Header
 from email.mime.multipart import MIMEMultipart
@@ -139,6 +140,7 @@ def main():
 
 # usage: ./rewe.py -u, --users=<json>
 
-if __name__ == '__main__' and datetime.datetime.today().weekday() == 5:
-    main()
+if __name__ == '__main__':
+    if (len(sys.argv) > 1 and sys.argv[1] == '--force') or datetime.datetime.today().weekday() == 5:
+        main()
 
