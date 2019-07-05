@@ -11,6 +11,8 @@ import os
 import datetime
 import sys
 import itertools
+import arrow
+from urllib.parse import urlparse
 
 from email.header import Header
 from email.mime.multipart import MIMEMultipart
@@ -23,6 +25,12 @@ HEADERS.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:52.0
 
 SCRIPT_PATH = os.path.dirname(os.path.realpath(__file__))
 REDDIT_CSS = os.path.join(SCRIPT_PATH, 'css', 'reddit.css')
+
+SUBREDDIT_HEADER = "<h1>/r/{subreddit}</h1>"
+SUBMISSION = """<div class="DIV_2">
+    <p class="P_3"><a href="{url}" class="A_4">{title}</a> <span class="SPAN_5">(<a href="" class="A_6">{domain}</a>)</span></p>
+        <p class="P_8">submitted <time class="TIME_9">{time}</time> by <a href="https://www.reddit.com/user/{user}" class="A_10">{user}</a><span class="SPAN_11"></span><span class="SPAN_12"></span> <a href="{shortlink}" rel="nofollow" class="A_15">{num_comments} comments</a></p>
+        </div>"""
 
 def _concat_css(input_name, output):
     with open(input_name, encoding='utf-8') as f:
@@ -78,11 +86,17 @@ def weekly_page_header(file, css=None):
 
 def weekly_page(praw_inst, subreddit, file):
     print("Getting submissions for {}".format(subreddit))
-    file.write('<h1>/r/{}</h1>'.format(subreddit))
-    file.write('<div class="content" role="main"><ul>')
+    file.write(SUBREDDIT_HEADER.format(subreddit=subreddit))
     for submission in praw_inst.subreddit(subreddit).top('week', limit=3):
-        file.write('<li><h3>[{}] <a href="{}">{}</a></h3></li>'.format(submission.score, submission.shortlink, submission.title))
-    file.write('</ul></div>')
+        file.write(SUBMISSION.format(
+            url=submission.url,
+            title=submission.title,
+            domain=urlparse(submission.url).netloc,
+            time=arrow.get(submission.created_utc).humanize(),
+            user=submission.author.name,
+            shortlink=submission.shortlink,
+            num_comments=submission.num_comments,
+        ))
 
 def weekly_page_footer(file):
     file.write('</body>')
