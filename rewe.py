@@ -1,23 +1,14 @@
 #!/bin/python3
 
 import praw
-import smtplib
 import requests
-import parsel
-import re
 import io
-import json
 import os
 import datetime
 import sys
 import itertools
 import arrow
 from urllib.parse import urlparse
-
-from email.header import Header
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from argparse import ArgumentParser
 from premailer import Premailer
 
 HEADERS = requests.utils.default_headers()
@@ -38,12 +29,6 @@ def _concat_css(input_name, output):
         output.write(f.read())
         output.write('\n</style>\n')
 
-def _extract_external_css(selector):
-    for p in selector.xpath("/html/head/link[@rel='stylesheet']"):
-            href = re.sub(r"^//", r"https://", p.xpath("@href").extract_first())
-            sheet = requests.get(href, headers=HEADERS).text if href else ""
-            yield sheet
-
 def weekly_page_header(file, css=None):
     if isinstance(file, str):
         with open(file, 'w', encoding='utf-8') as f:
@@ -52,33 +37,10 @@ def weekly_page_header(file, css=None):
     file.write('<!DOCTYPE html>')
     file.write('<html>')
 
-    if css == 1: # Download External
-        file.write('<head>')
-        file.write('<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">')
-        for stylesheet in _extract_external_css(sel):
-                file.write('\n<style>\n')
-                file.write(stylesheet)
-                file.write('\n</style>\n')
-        file.write('</head>')
-    elif css == 2: # Keep External
-        head = sel.xpath("/html/head").extract_first()
-        head = re.sub(r'="//', '="https://', head)
-        file.write(head)
-    elif isinstance(css, str):
-        file.write('<head>')
-        file.write('<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">')
-        _concat_css(css, file)
-        file.write('</head>')
-    elif isinstance(css, list):
-        file.write('<head>')
-        file.write('<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">')
-        for c in css:
-            _concat_css(c, file)
-        file.write('</head>')
-    else:
-        file.write('<head>')
-        file.write('<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">')
-        file.write('</head>')
+    file.write('<head>')
+    file.write('<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">')
+    _concat_css(css, file)
+    file.write('</head>')
 
     file.write('<body class="">')
 
@@ -103,21 +65,24 @@ def weekly_page_footer(file):
     file.write('</html>')
 
 def send_email(subject, to, message):
-    fromaddr = os.environ['REWE_GMAIL_SENDER']
-    frompass = os.environ['REWE_GMAIL_PASS']
-
-    msg = MIMEMultipart('alternative')
-    msg['Subject'] = Header(subject, 'utf-8')
-    msg['From'] = fromaddr
-    msg['To'] = to
-
-    msg.attach(MIMEText('Weekly Subreddit', 'plain'))
-    msg.attach(MIMEText(message, 'html'))
-
-    with smtplib.SMTP_SSL(host='smtp.gmail.com', port=465) as server:
-        server.ehlo()
-        server.login(fromaddr, frompass)
-        server.sendmail(fromaddr, [to], msg.as_string())
+    r = requests.post('https://api.mailjet.com/v3.1/send',
+                      auth=(os.environ['MJ_APIKEY_PUBLIC'], os.environ['MJ_APIKEY_PRIVATE']),
+                      json={
+                          "Messages": [
+                              {
+                                  "From": {
+                                      "Email": to,
+                                      "Name": "Reddit Weekly",
+                                  },
+                                  "To": [{
+                                      "Email": to
+                                  }],
+                                  "Subject": subject,
+                                  "HTMLPart": message,
+                              }
+                          ]
+                      })
+    print(r.text)
 
 def praw_instance(token):
     praw_inst = praw.Reddit(client_id=os.environ['REWE_REDDIT_APP_ID'],
@@ -151,8 +116,6 @@ def send_newsletter(token, email):
 
 def main():
     send_newsletter(os.environ['REWE_REDDIT_REFRESH_TOKEN'], os.environ['REWE_DEST_EMAIL'])
-
-# usage: ./rewe.py -u, --users=<json>
 
 if __name__ == '__main__':
     if (len(sys.argv) > 1 and sys.argv[1] == '--force') or datetime.datetime.today().weekday() == 5:
