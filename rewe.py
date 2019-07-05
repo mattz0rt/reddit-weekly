@@ -10,6 +10,7 @@ import json
 import os
 import datetime
 import sys
+import itertools
 
 from email.header import Header
 from email.mime.multipart import MIMEMultipart
@@ -75,25 +76,13 @@ def weekly_page_header(file, css=None):
 
     return file
 
-def weekly_page(subreddit, file):
-    r = requests.get("https://www.reddit.com/r/{}/top/?sort=top&t=week".format(subreddit),
-                     headers=HEADERS)
-
-    if r.status_code != 200:
-        raise RuntimeError("Request status code is {}.".format(r.status_code))
-    if r.encoding.lower() != 'utf-8':
-        raise RuntimeError("Request didn't return a UTF-8 output.")
-
-    sel = parsel.Selector(text=r.text)
-
-    file.write('<div class="content" role="main">')
-    for id, spacer in enumerate(sel.xpath("/html/body/div[@class='content']/div[@class='spacer' and style]")):
-        content = spacer.extract()
-        content = re.sub(r'="//', r'="https://', content)
-        file.write(content)
-        if id >= 4:
-            break
-    file.write('</div>')
+def weekly_page(praw_inst, subreddit, file):
+    print("Getting submissions for {}".format(subreddit))
+    file.write('<h1>/r/{}</h1>'.format(subreddit))
+    file.write('<div class="content" role="main"><ul>')
+    for submission in praw_inst.subreddit(subreddit).top('week', limit=3):
+        file.write('<li><h3>[{}] <a href="{}">{}</a></h3></li>'.format(submission.score, submission.shortlink, submission.title))
+    file.write('</ul></div>')
 
 def weekly_page_footer(file):
     file.write('</body>')
@@ -116,20 +105,26 @@ def send_email(subject, to, message):
         server.login(fromaddr, frompass)
         server.sendmail(fromaddr, [to], msg.as_string())
 
-def user_subreddits(token):
-    reddit = praw.Reddit(client_id=os.environ['REWE_REDDIT_APP_ID'],
+def praw_instance(token):
+    praw_inst = praw.Reddit(client_id=os.environ['REWE_REDDIT_APP_ID'],
                          client_secret=os.environ['REWE_REDDIT_APP_SECRET'],
+                         username=os.environ['REWE_REDDIT_USERNAME'],
+                         password=os.environ['REWE_REDDIT_PASSWORD'],
                          user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:52.0) Gecko/20100101 Firefox/52.0',
                          refresh_token=token)
+    return praw_inst
+
+def user_subreddits(reddit):
     return reddit.user.subreddits()
 
 def send_newsletter(token, email):
     with io.StringIO() as body:
         file = weekly_page_header(body, css=REDDIT_CSS)
+        praw_inst = praw_instance(token)
 
-        for subreddit in user_subreddits(token):
+        for subreddit in user_subreddits(praw_inst):
             subreddit = subreddit.display_name
-            weekly_page(subreddit, file)
+            weekly_page(praw_inst, subreddit, file)
 
         weekly_page_footer(file)
         email_body = Premailer(body.getvalue(),
